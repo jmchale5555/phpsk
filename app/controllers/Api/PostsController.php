@@ -21,10 +21,21 @@ class PostsController extends ApiController
         }
 
         $post = new Post();
+        $page = (int)($_GET['page'] ?? 1);
+        $perPage = (int)($_GET['per_page'] ?? 20);
+        $sort = trim((string)($_GET['sort'] ?? 'id'));
+        $dir = trim((string)($_GET['dir'] ?? 'desc'));
 
         try
         {
-            $rows = $post->query('SELECT id, user_id, title, body, slug, is_published, published_at, created_at, updated_at FROM posts ORDER BY id DESC LIMIT 100');
+            $result = $post->paginate(
+                [],
+                $page,
+                $perPage,
+                $sort,
+                $dir,
+                ['id', 'created_at', 'updated_at', 'published_at', 'title']
+            );
         }
         catch (Throwable $e)
         {
@@ -32,8 +43,11 @@ class PostsController extends ApiController
             return;
         }
 
-        $posts = is_array($rows) ? array_map([$this, 'formatPost'], $rows) : [];
-        $this->ok(['posts' => $posts]);
+        $posts = array_map([$this, 'formatPost'], $result['items']);
+        $this->ok([
+            'posts' => $posts,
+            'meta' => $result['meta'],
+        ]);
     }
 
     public function show(string $id = ''): void
