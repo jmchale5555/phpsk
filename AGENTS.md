@@ -155,6 +155,8 @@ php cli/migrate.php status
 ## 6) API Conventions
 
 - Return JSON for all `/api/*` endpoints.
+- Routing pattern: `/api/{resource}/{method?}/{param1?}/{param2?...}`.
+- If method is omitted, it defaults to `index`.
 - Use `ApiController` helpers (`ok`, `error`, `methodNotAllowed`, `notFound`).
 - CSRF token endpoint: `GET /api/auth/csrf`.
 - Mutating auth endpoints expect `X-CSRF-Token` header.
@@ -169,6 +171,14 @@ php cli/migrate.php status
   - `405` method not allowed
   - `422` validation failure
   - `419` CSRF token mismatch
+
+Route examples:
+
+- `GET /api/posts` -> `PostsController::index()`
+- `GET /api/posts/show/12` -> `PostsController::show("12")`
+- `POST /api/posts/create` -> `PostsController::create()`
+- `POST /api/posts/update/12` -> `PostsController::update("12")`
+- `POST /api/posts/delete/12` -> `PostsController::delete("12")`
 
 ## 7) Backend Style Guidelines
 
@@ -238,9 +248,19 @@ Naming:
 - `docker compose ps` shows all services up and healthy.
 - `GET /api/health/index` returns `{"ok":true,...}`.
 - `GET /api/auth/me` returns `{"user":null}` when logged out.
+- `GET /api/posts` returns a posts array.
+- `GET /api/posts/show/1` returns either a post object or `404` JSON.
+- `POST /api/posts/create` with auth + CSRF creates a post (`201`).
 - SPA loads at `/` and mounts React root.
 - Frontend build outputs to `public/spa`.
 - No PHP syntax errors in edited backend files.
+
+Quick API smoke commands:
+
+```bash
+curl -s http://localhost:8080/api/posts
+curl -s http://localhost:8080/api/posts/show/1
+```
 
 ---
 

@@ -33,6 +33,11 @@ class App
 
     private function loadApiController(array $URL): void
     {
+        /**
+         * API route pattern:
+         * /api/{resource}/{method?}/{param1?}/{param2?...}
+         * method defaults to "index" when omitted.
+         */
         header('Content-Type: application/json; charset=utf-8');
 
         $resource = ucfirst($URL[1] ?? '');
