@@ -12,6 +12,50 @@ trait Model
     protected $order_column = "id";
     public $errors          = [];
 
+    public function paginate(
+        array $where = [],
+        int $page = 1,
+        int $perPage = 20,
+        string $orderBy = 'id',
+        string $orderDir = 'desc',
+        ?array $allowedOrderColumns = null
+    ): array
+    {
+        $page = $page < 1 ? 1 : $page;
+        $perPage = $perPage < 1 ? 1 : $perPage;
+        $perPage = $perPage > 100 ? 100 : $perPage;
+
+        [$orderBy, $orderDir] = $this->sanitizePaginationOrder($orderBy, $orderDir, $allowedOrderColumns);
+        [$whereSql, $params] = $this->buildPaginateWhere($where);
+
+        $offset = ($page - 1) * $perPage;
+
+        $countQuery = "select count(*) as total from $this->table" . $whereSql;
+        $countRows = $this->query($countQuery, $params);
+        $total = (int)($countRows[0]->total ?? 0);
+
+        $dataQuery = "select * from $this->table" . $whereSql . " order by {$orderBy} {$orderDir} limit {$perPage} offset {$offset}";
+        $items = $this->query($dataQuery, $params);
+        if (!is_array($items))
+        {
+            $items = [];
+        }
+
+        $totalPages = $total > 0 ? (int)ceil($total / $perPage) : 0;
+
+        return [
+            'items' => $items,
+            'meta' => [
+                'page' => $page,
+                'per_page' => $perPage,
+                'total' => $total,
+                'total_pages' => $totalPages,
+                'has_next' => $totalPages > 0 ? $page < $totalPages : false,
+                'has_prev' => $page > 1,
+            ],
+        ];
+    }
+
     public function all()
     {
 
@@ -188,5 +232,77 @@ trait Model
         // echo $query;
         $this->query($query, $data);
         return false;
+    }
+
+    private function sanitizePaginationOrder(string $orderBy, string $orderDir, ?array $allowedOrderColumns): array
+    {
+        $fallback = 'id';
+
+        if (!is_array($allowedOrderColumns) || empty($allowedOrderColumns))
+        {
+            $allowedOrderColumns = [$fallback];
+        }
+
+        $allowed = [];
+        foreach ($allowedOrderColumns as $column)
+        {
+            $column = trim((string)$column);
+            if ($this->isSafeIdentifier($column))
+            {
+                $allowed[] = $column;
+            }
+        }
+
+        if (empty($allowed))
+        {
+            $allowed = [$fallback];
+        }
+
+        if (!in_array($orderBy, $allowed, true))
+        {
+            $orderBy = $allowed[0];
+        }
+
+        $orderDir = strtolower(trim($orderDir)) === 'asc' ? 'asc' : 'desc';
+
+        return [$orderBy, $orderDir];
+    }
+
+    private function buildPaginateWhere(array $where): array
+    {
+        if (empty($where))
+        {
+            return ['', []];
+        }
+
+        $clauses = [];
+        $params = [];
+        $index = 0;
+
+        foreach ($where as $column => $value)
+        {
+            $column = trim((string)$column);
+            if (!$this->isSafeIdentifier($column))
+            {
+                continue;
+            }
+
+            $param = 'paginate_' . $index;
+            $clauses[] = $column . ' = :' . $param;
+            $params[$param] = $value;
+            $index++;
+        }
+
+        if (empty($clauses))
+        {
+            return ['', []];
+        }
+
+        return [' where ' . implode(' && ', $clauses), $params];
+    }
+
+    private function isSafeIdentifier(string $value): bool
+    {
+        return (bool)preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $value);
     }
 }
