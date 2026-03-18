@@ -97,21 +97,44 @@ docker compose exec -T php php -l app/core/App.php
 
 Current status:
 
-- No `tests/` directory.
-- No `phpunit.xml` config.
+- PHPUnit suite is configured in `phpunit.xml`.
 
-If PHPUnit is added:
+Run full suite (inside php container):
+
+```bash
+docker compose exec -T php vendor/bin/phpunit
+```
+
+Run unit suite only:
+
+```bash
+docker compose exec -T php vendor/bin/phpunit --testsuite Unit
+```
+
+Run feature suite against live docker nginx/php test stack:
+
+```bash
+docker compose exec -T php vendor/bin/phpunit --testsuite Feature
+```
+
+Run a single test file:
+
+```bash
+docker compose exec -T php vendor/bin/phpunit tests/Feature/AuthApiTest.php
+```
+
+Run a single test method:
+
+```bash
+docker compose exec -T php vendor/bin/phpunit --filter testSignupAndMeFlow tests/Feature/AuthApiTest.php
+```
+
+Local (non-docker) PHPUnit equivalents:
 
 ```bash
 vendor/bin/phpunit
 vendor/bin/phpunit tests/Feature/ExampleTest.php
 vendor/bin/phpunit --filter test_method_name tests/Feature/ExampleTest.php
-```
-
-If Pest is added:
-
-```bash
-vendor/bin/pest tests/Feature/ExampleTest.php --filter="test description"
 ```
 
 ### Migrations
@@ -238,8 +261,10 @@ Naming:
 ## 9) Docker Notes
 
 - Services: `db`, `php`, `nginx`, `node`.
+- Test services: `php_test`, `nginx_test`.
 - App URL through nginx: `http://localhost:8080`.
 - Vite dev server URL: `http://localhost:5173`.
+- Test API URL through nginx test service: `http://localhost:8081`.
 - Node service runs `npm install && npm run dev`.
 - PHP service uses `VITE_DEV_SERVER` to inject dev assets in `public/spa.php`.
 

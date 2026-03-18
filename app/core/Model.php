@@ -6,10 +6,6 @@ trait Model
 {
     use \Model\Database;
 
-    protected $limit        = 70;
-    protected $offset       = 0;
-    protected $order_type   = "desc";
-    protected $order_column = "id";
     public $errors          = [];
 
     public function paginate(
@@ -56,24 +52,54 @@ trait Model
         ];
     }
 
-    public function all()
+    public function all(
+        int $limit = 70,
+        int $offset = 0,
+        string $orderBy = 'id',
+        string $orderDir = 'desc',
+        ?array $allowedOrderColumns = null
+    )
     {
+        $limit = $this->normalizeLimit($limit, 70, 1000);
+        $offset = $this->normalizeOffset($offset);
+        [$orderBy, $orderDir] = $this->sanitizePaginationOrder($orderBy, $orderDir, $allowedOrderColumns ?? ['id']);
 
-        $query = "select * from $this->table limit $this->limit offset $this->offset";
+        $query = "select * from $this->table order by {$orderBy} {$orderDir} limit {$limit} offset {$offset}";
 
         return $this->query($query);
     }
 
-    public function where(array $where_array = [], array $where_not_array = [], array $greater_than_array = []): array|bool
+    public function where(
+        array $where_array = [],
+        array $where_not_array = [],
+        array $greater_than_array = [],
+        int $limit = 70,
+        int $offset = 0,
+        string $orderBy = 'id',
+        string $orderDir = 'desc',
+        ?array $allowedOrderColumns = null
+    ): array|bool
     {
+        $limit = $this->normalizeLimit($limit, 70, 1000);
+        $offset = $this->normalizeOffset($offset);
+        [$orderBy, $orderDir] = $this->sanitizePaginationOrder($orderBy, $orderDir, $allowedOrderColumns ?? ['id']);
 
-        $query = "select * from $this->table where ";
+        $query = "select * from $this->table";
+        $clauses = [];
+        $data = [];
 
         if (!empty($where_array))
         {
             foreach ($where_array as $key => $value)
             {
-                $query .= $key . "= :" . $key . " && ";
+                if (!$this->isSafeIdentifier((string)$key))
+                {
+                    continue;
+                }
+
+                $param = 'eq_' . $key;
+                $clauses[] = $key . " = :" . $param;
+                $data[$param] = $value;
             }
         }
 
@@ -81,7 +107,14 @@ trait Model
         {
             foreach ($where_not_array as $key => $value)
             {
-                $query .= $key . "!= :" . $key . " && ";
+                if (!$this->isSafeIdentifier((string)$key))
+                {
+                    continue;
+                }
+
+                $param = 'neq_' . $key;
+                $clauses[] = $key . " != :" . $param;
+                $data[$param] = $value;
             }
         }
 
@@ -89,15 +122,24 @@ trait Model
         {
             foreach ($greater_than_array as $key => $value)
             {
-                $query .= $key . "> :" . $key . " && ";
+                if (!$this->isSafeIdentifier((string)$key))
+                {
+                    continue;
+                }
+
+                $param = 'gt_' . $key;
+                $clauses[] = $key . " > :" . $param;
+                $data[$param] = $value;
             }
         }
 
-        $query = trim($query, " && ");
-        $query .= " order by $this->order_column $this->order_type limit $this->limit offset $this->offset";
+        if (!empty($clauses))
+        {
+            $query .= ' where ' . implode(' AND ', $clauses);
+        }
 
-        $data = array_merge($where_array, $where_not_array, $greater_than_array);
-        // dd($data);
+        $query .= " order by {$orderBy} {$orderDir} limit {$limit} offset {$offset}";
+
         return $this->query($query, $data);
     }
 
@@ -122,54 +164,62 @@ trait Model
     // }
 
 
-    public function first($data, $data_not = [])
+    public function first(array $data, array $data_not = [], string $orderBy = 'id', string $orderDir = 'desc')
     {
-        $keys = array_keys($data);
-        $keys_not = array_keys($data_not);
-        $query = "select * from $this->table where ";
-        foreach ($keys as $key)
-        {
-            $query .= $key . "= :" . $key . " && ";
-        }
-        foreach ($keys_not as $key)
-        {
-            $query .= $key . "!= :" . $key . " && ";
-        }
-
-        $query = trim($query, " && ");
-        $query .= " limit $this->limit offset $this->offset";
-        $data = array_merge($data, $data_not);
-        $this->query($query, $data);
-
-        $result = $this->query($query, $data);
+        $result = $this->where($data, $data_not, [], 1, 0, $orderBy, $orderDir, [$orderBy, 'id']);
         if ($result)
+        {
             return $result[0];
+        }
 
         return false;
     }
 
-    public function between($dataGreater = [], $dataLess = [])
+    public function between(array $dataGreater = [], array $dataLess = [], int $limit = 70, int $offset = 0): array|bool
     {
-        $keysGreater = array_keys($dataGreater);
-        $keysLess = array_keys($dataLess);
-        $query = "select * from $this->table where ";
-        foreach ($keysGreater as $key)
+        $limit = $this->normalizeLimit($limit, 70, 1000);
+        $offset = $this->normalizeOffset($offset);
+
+        $query = "select * from $this->table";
+        $clauses = [];
+        $params = [];
+
+        foreach ($dataGreater as $key => $value)
         {
-            $query .= $key . "> :" . $key . " && ";
-        }
-        foreach ($keysLess as $key)
-        {
-            $query .= $key . "< :" . $key . " && ";
+            if (!$this->isSafeIdentifier((string)$key))
+            {
+                continue;
+            }
+
+            $param = 'gt_' . $key;
+            $clauses[] = $key . " > :" . $param;
+            $params[$param] = $value;
         }
 
-        $query = trim($query, " && ");
-        $query .= " limit $this->limit offset $this->offset";
-        $data = array_merge($dataLess, $dataGreater);
-        $this->query($query, $data);
+        foreach ($dataLess as $key => $value)
+        {
+            if (!$this->isSafeIdentifier((string)$key))
+            {
+                continue;
+            }
 
-        $result = $this->query($query, $data);
+            $param = 'lt_' . $key;
+            $clauses[] = $key . " < :" . $param;
+            $params[$param] = $value;
+        }
+
+        if (!empty($clauses))
+        {
+            $query .= ' where ' . implode(' AND ', $clauses);
+        }
+
+        $query .= " limit {$limit} offset {$offset}";
+
+        $result = $this->query($query, $params);
         if ($result)
+        {
             return $result;
+        }
 
         return false;
     }
@@ -304,5 +354,25 @@ trait Model
     private function isSafeIdentifier(string $value): bool
     {
         return (bool)preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $value);
+    }
+
+    private function normalizeLimit(int $limit, int $default = 70, int $max = 1000): int
+    {
+        if ($limit < 1)
+        {
+            $limit = $default;
+        }
+
+        if ($limit > $max)
+        {
+            $limit = $max;
+        }
+
+        return $limit;
+    }
+
+    private function normalizeOffset(int $offset): int
+    {
+        return $offset < 0 ? 0 : $offset;
     }
 }

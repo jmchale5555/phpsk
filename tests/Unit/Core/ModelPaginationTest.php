@@ -32,6 +32,30 @@ class ModelPaginationTest extends TestCase
         $this->assertStringContainsString('order by id desc', strtolower($queries[1]['sql']));
         $this->assertStringContainsString('limit 100 offset 0', strtolower($queries[1]['sql']));
     }
+
+    public function testWhereIsStatelessAndUsesExplicitOrdering(): void
+    {
+        $model = new FakePaginateModel();
+        $rows = $model->where(['user_id' => 4], [], [], 10, 20, 'created_at', 'asc', ['id', 'created_at']);
+
+        $this->assertIsArray($rows);
+        $queries = $model->queries();
+        $sql = strtolower(end($queries)['sql']);
+
+        $this->assertStringContainsString('where user_id = :eq_user_id', $sql);
+        $this->assertStringContainsString('order by created_at asc', $sql);
+        $this->assertStringContainsString('limit 10 offset 20', $sql);
+    }
+
+    public function testFirstExecutesSingleQueryAndReturnsSingleRow(): void
+    {
+        $model = new FakePaginateModel();
+        $row = $model->first(['slug' => 'post-a']);
+
+        $this->assertIsObject($row);
+        $this->assertSame(11, $row->id);
+        $this->assertCount(1, $model->queries());
+    }
 }
 
 class FakePaginateModel

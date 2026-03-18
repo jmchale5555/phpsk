@@ -4,6 +4,8 @@ cgi-bin
 
 html
 node_modules
+vendor/
+.phpunit.cache/
 .env
 .env.*
 !.env.example
